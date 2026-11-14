@@ -146,9 +146,9 @@ export function act(prev, action) {
       return say(s.grateOpen ? "The grate is off. Below it, a shallow cavity full of cables, and a damp NOTE." : "A square metal floor grate. One corner sits a few millimetres proud. It's not screwed down.");
 
     case "open_grate":
-      if (s.grateOpen) return say("The grate is already off. There's a damp NOTE down there.");
+      if (s.grateOpen) return say("The grate is already off, lying upside down. PUT IT BACK, it insists. There's a damp NOTE down in the cavity.");
       s.grateOpen = true;
-      return say("You hook your fingers under the raised corner and heave. The grate scrapes aside. Below: bundled cables, a lot of dust, and a damp folded NOTE.");
+      return say("You hook your fingers under the raised corner and heave. The grate scrapes aside and flips over. Scrawled across its underside in red marker:\n\n  PUT IT BACK.\n\nYou don't. Below: bundled cables, a lot of dust, and a damp folded NOTE.");
 
     case "read_note":
       if (!s.grateOpen) return say("You don't see any note.");
