@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>The Server Room</title>
+  <style>
+    :root { --bg: #0b0f0c; --fg: #9fe8a8; --dim: #5d8a63; --you: #e8e29f; --win: #7ff0ff; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg); color: var(--fg);
+      font: 15px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      display: flex; justify-content: center;
+    }
+    main { width: 100%; max-width: 760px; height: 100%; display: flex; flex-direction: column; padding: 16px; }
+    #log { flex: 1; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word; padding-bottom: 8px; }
+    #log::-webkit-scrollbar { width: 6px; } #log::-webkit-scrollbar-thumb { background: #1d2a20; }
+    .you { color: var(--you); margin-top: 1em; }
+    .room { margin-top: .25em; }
+    .win { color: var(--win); }
+    .dim { color: var(--dim); }
+    form { display: flex; gap: .5em; border-top: 1px solid #1d2a20; padding-top: 10px; }
+    form span { color: var(--you); }
+    input {
+      flex: 1; background: transparent; border: 0; outline: 0;
+      color: var(--you); font: inherit; caret-color: var(--fg);
+    }
+    body::after { /* faint scanlines */
+      content: ""; position: fixed; inset: 0; pointer-events: none;
+      background: repeating-linear-gradient(transparent 0 2px, rgba(0,0,0,.18) 2px 3px);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div id="log" aria-live="polite"></div>
+    <form id="f" autocomplete="off">
+      <span>&gt;</span>
+      <input id="cmd" aria-label="What do you do?" placeholder="what do you do?" autofocus />
+    </form>
+  </main>
+  <script>
+    const log = document.getElementById("log");
+    const form = document.getElementById("f");
+    const cmd = document.getElementById("cmd");
+    let sessionId = null;
+
+    function print(text, cls) {
+      const div = document.createElement("div");
+      div.className = cls;
+      log.appendChild(div);
+      // Type the room's reply out like an old terminal.
+      if (cls.includes("room") && text) {
+        let i = 0;
+        const tick = () => {
+          div.textContent = text.slice(0, (i += 3));
+          log.scrollTop = log.scrollHeight;
+          if (i < text.length) setTimeout(tick, 8);
+        };
+        tick();
+      } else {
+        div.textContent = text;
+        log.scrollTop = log.scrollHeight;
+      }
+    }
+
+    async function send(input) {
+      cmd.disabled = true;
+      try {
+        const res = await fetch("/api/command", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, input }),
+        });
+        const data = await res.json();
+        sessionId = data.sessionId || sessionId;
+        print(data.text, data.escaped ? "room win" : "room");
+        if (data.escaped) { cmd.placeholder = "refresh to play again"; return; }
+      } catch {
+        print("[connection lost. the hum gets louder.]", "room dim");
+      }
+      cmd.disabled = false;
+      cmd.focus();
+    }
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const input = cmd.value.trim();
+      if (!input) return;
+      print("> " + input, "you");
+      cmd.value = "";
+      send(input);
+    });
+
+    send(""); // start a new game
+  </script>
+</body>
+</html>

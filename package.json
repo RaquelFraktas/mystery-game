@@ -1,0 +1,11 @@
+{
+  "name": "mystery-game",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The Server Room: a text-based escape room that uses Jev to understand player input.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": { "node": ">=20" }
+}
