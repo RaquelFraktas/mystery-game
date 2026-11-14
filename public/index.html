@@ -44,14 +44,42 @@
     const log = document.getElementById("log");
     const form = document.getElementById("f");
     const cmd = document.getElementById("cmd");
-    let sessionId = null;
+    // The whole game lives here: the actions taken so far (the server replays
+    // them to rebuild the room) plus the visible transcript, saved to
+    // localStorage so a refresh or a server restart doesn't lose progress.
+    const SAVE_KEY = "serverRoom.save";
+    const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+    const MAX_TRANSCRIPT = 300;
+    const RESTART = /^(restart|new game|start over)$/i;
+    let game = blankGame();
 
-    function print(text, cls) {
+    function blankGame() {
+      return { actions: [], transcript: [], escaped: false, lastActive: Date.now() };
+    }
+
+    // Storage can be blocked (private mode, disabled site data): the game still
+    // works, it just won't survive a refresh.
+    function loadSave() {
+      try {
+        const s = JSON.parse(localStorage.getItem(SAVE_KEY));
+        if (s && Array.isArray(s.actions) && Array.isArray(s.transcript) && typeof s.lastActive === "number") return s;
+      } catch {}
+      return null;
+    }
+    function persist() {
+      game.lastActive = Date.now();
+      game.transcript = game.transcript.slice(-MAX_TRANSCRIPT);
+      try { localStorage.setItem(SAVE_KEY, JSON.stringify(game)); } catch {}
+    }
+    const isIdle = (g) => Date.now() - g.lastActive > IDLE_TIMEOUT_MS;
+
+    function print(text, cls, { animate = true, record = true } = {}) {
+      if (record) game.transcript.push({ text, cls });
       const div = document.createElement("div");
       div.className = cls;
       log.appendChild(div);
       // Type the room's reply out like an old terminal.
-      if (cls.includes("room") && text) {
+      if (animate && cls.includes("room") && text) {
         let i = 0;
         const tick = () => {
           div.textContent = text.slice(0, (i += 3));
@@ -65,35 +93,56 @@
       }
     }
 
-    async function send(input) {
+    async function send(payload) {
       cmd.disabled = true;
       try {
         const res = await fetch("/api/command", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId, input }),
+          body: JSON.stringify({ ...payload, actions: game.actions }),
         });
         const data = await res.json();
-        sessionId = data.sessionId || sessionId;
+        if (res.ok) {
+          game.actions = data.actions;
+          game.escaped = Boolean(data.escaped);
+        }
         print(data.text, data.escaped ? "room win" : "room");
+        persist();
         if (data.escaped) { cmd.placeholder = "refresh to play again"; return; }
       } catch {
-        print("[connection lost. the hum gets louder.]", "room dim");
+        print("[connection lost. the hum gets louder.]", "room dim", { record: false });
       }
       cmd.disabled = false;
       cmd.focus();
+    }
+
+    // expired: the player went idle, so the room says so before the intro.
+    function startNewGame(expired = false) {
+      game = blankGame();
+      send(expired ? { expired: true } : { input: "" });
     }
 
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       const input = cmd.value.trim();
       if (!input) return;
-      print("> " + input, "you");
       cmd.value = "";
-      send(input);
+      print("> " + input, "you");
+      if (RESTART.test(input)) return startNewGame();
+      if (isIdle(game)) return startNewGame(true); // left the tab open past the timeout
+      send({ input });
     });
 
-    send(""); // start a new game
+    // Resume a saved game, unless it's finished or has gone idle.
+    const saved = loadSave();
+    if (saved && !saved.escaped && !isIdle(saved)) {
+      game = saved;
+      for (const { text, cls } of game.transcript) print(text, cls, { animate: false, record: false });
+      cmd.focus();
+    } else {
+      try { localStorage.removeItem(SAVE_KEY); } catch {}
+      startNewGame(Boolean(saved && !saved.escaped));
+    }
   </script>
 </body>
 </html>
